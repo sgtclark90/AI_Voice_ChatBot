@@ -1,71 +1,83 @@
 import os
 import time
-import shutil
 import audio_manager
 import chatgpt_responder
 import database_manager
 from dotenv import load_dotenv
+from mic_input_manager import MicInputManager
 
 # Load environment variables
 load_dotenv()
 
-def scan_files(folder_path, scanned_files):
-    files = os.listdir(folder_path)
-    for file in files:
-        if file != "README.md":
-            file_path = os.path.join(folder_path, file)
-            if file_path not in scanned_files:
-                scanned_files.append(file_path)
-    return scanned_files
+def transfer_to_representative(user_input, ai_responder):
+    print(f"Transferring to human representative. User input: {user_input}")
+    ai_responder.end_conversation()
 
-def move_file(file_path, folder_path="Processed"):
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
+def process_audio(audio_file, audio_controller, ai_responder):
     try:
-        shutil.move(file_path, folder_path)
-    except Exception as e:
-        print(f"Error moving file: {e}")
+        prompt = audio_controller.audio2text(audio_file)
+        print(f"Transcribed text: {prompt}")
 
-def main():
-    scanned_files = []
-    audio_controller = audio_manager.AudioManager()
-    db_manager = database_manager.DatabaseManager()
-
-    api_key = os.getenv("OPENAI_API_KEY")
-    ai_responder = chatgpt_responder.ChatGPTResponder(api_key, db_manager)
-
-    while True:
-        start_time = time.time()
-        scanned_files = scan_files("Inputs", scanned_files)
-        if not scanned_files:
-            print("No new files found. Waiting for 1 second...")
-            time.sleep(1)
-            continue
-        try:
-            prompt = audio_controller.audio2text(scanned_files[0])
-        except Exception as e:
-            print(f"Error converting audio to text: {e}")
-            time.sleep(1)
-            continue
+        if prompt.lower() in ["goodbye", "bye", "end call", "hang up"]:
+            print("Customer ended the call.")
+            ai_responder.end_conversation()
+            return False
 
         response = ai_responder.get_response(prompt)
-        
+        print(f"AI response: {response}")
+
         if "connect you with a representative" in response.lower():
-            # Logic to transfer to a human representative
-            transfer_to_representative(prompt)
+            transfer_to_representative(prompt, ai_responder)
+            return False
         else:
             audio_controller.text2audio(response)
 
-        move_file(scanned_files[0])
-        scanned_files.pop(0)
+        return True
+    except Exception as e:
+        print(f"Error processing audio: {e}")
+        return False
 
-        end_time = time.time()
-        print(f"Response time: {end_time - start_time:.2f} seconds")
+def main():
+    audio_controller = audio_manager.AudioManager()
+    mic_manager = MicInputManager()
 
-def transfer_to_representative(user_input):
-    # Implement logic to transfer the call to a human representative
-    print(f"Transferring to human representative. User input: {user_input}")
-    # You might want to save the user input to a file or database for the representative to review
+    api_key = os.getenv("OPENAI_API_KEY")
     
+    with database_manager.DatabaseManager() as db_manager:
+        ai_responder = chatgpt_responder.ChatGPTResponder(api_key, db_manager)
+
+        print("AI Assistant is ready. Say 'goodbye' to end the conversation.")
+
+        while True:
+            try:
+                start_time = time.time()
+
+                print("Please speak now...")
+                input_file = mic_manager.get_input()
+                
+                continue_conversation = process_audio(input_file, audio_controller, ai_responder)
+                
+                if input_file:
+                    os.remove(input_file)  # Remove temporary mic input file
+
+                end_time = time.time()
+                print(f"Response time: {end_time - start_time:.2f} seconds")
+
+                if not continue_conversation:
+                    print("Conversation ended. Ready for a new call.")
+                    continue
+
+                print("Ready for next input.")
+
+            except KeyboardInterrupt:
+                print("\nEnding the current conversation and exiting the AI Assistant.")
+                ai_responder.end_conversation()
+                break
+            except Exception as e:
+                print(f"An error occurred: {e}")
+                print("Restarting the input process...")
+
+    print("Database connection closed. Exiting program.")
+
 if __name__ == "__main__":
     main()

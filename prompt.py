@@ -11,6 +11,7 @@ files = [
     "chatgpt_responder.py",
     "audio_manager.py",
     ".env",
+    "MicInputManager.py",
 ]
 
 def read_file_contents(file_path):

@@ -8,20 +8,45 @@ class ChatGPTResponder:
             "bill", "payment", "usage", "meter", "outage", "power", "electricity",
             "account", "service", "rate", "kilowatt", "kwh", "energy", "utility"
         ]
+        self.conversation_history = []
+        self.current_customer_id = None
+
+    def start_new_conversation(self, customer_id):
+        self.conversation_history = []
+        self.current_customer_id = customer_id
+
+    def end_conversation(self):
+        if self.conversation_history:
+            transcript = "\n".join([f"{'AI' if msg['role'] == 'assistant' else 'Customer'}: {msg['content']}" 
+                                    for msg in self.conversation_history])
+            self.db_manager.log_conversation(self.current_customer_id, transcript)
+        self.conversation_history = []
+        self.current_customer_id = None
 
     def get_response(self, user_input):
         customer_info = self.db_manager.get_customer_info(user_input)
         is_utility_related = self._is_utility_related(user_input)
-        prompt = self._construct_prompt(user_input, customer_info, is_utility_related)
+        
+        if not self.current_customer_id:
+            self.start_new_conversation(customer_info['customer_id'] if customer_info else None)
+        
+        self.conversation_history.append({"role": "user", "content": user_input})
+        
+        system_prompt = self._get_system_prompt(is_utility_related)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            *self.conversation_history
+        ]
         
         response = self.client.chat.completions.create(
             model="gpt-4",
-            messages=[
-                {"role": "system", "content": self._get_system_prompt(is_utility_related)},
-                {"role": "user", "content": prompt}
-            ]
+            messages=messages
         )
-        return response.choices[0].message.content
+        
+        ai_response = response.choices[0].message.content
+        self.conversation_history.append({"role": "assistant", "content": ai_response})
+        
+        return ai_response
 
     def _is_utility_related(self, user_input):
         return any(keyword in user_input.lower() for keyword in self.utility_keywords)
