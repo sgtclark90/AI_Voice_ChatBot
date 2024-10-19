@@ -1,7 +1,6 @@
 import whisper
 import pyttsx3
 
-
 class AudioManager:
     def __init__(self):
         self.model = whisper.load_model("tiny")

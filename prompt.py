@@ -7,9 +7,10 @@ base_path = ""
 # List of files to process
 files = [
     "main.py",
-    "llama_responder.py",
+    "database_manager.py",
     "chatgpt_responder.py",
     "audio_manager.py",
+    ".env",
 ]
 
 def read_file_contents(file_path):
