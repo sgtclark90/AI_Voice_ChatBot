@@ -49,7 +49,12 @@ def main():
             continue
 
         response = ai_responder.get_response(prompt)
-        audio_controller.text2audio(response)
+        
+        if "connect you with a representative" in response.lower():
+            # Logic to transfer to a human representative
+            transfer_to_representative(prompt)
+        else:
+            audio_controller.text2audio(response)
 
         move_file(scanned_files[0])
         scanned_files.pop(0)
@@ -57,5 +62,10 @@ def main():
         end_time = time.time()
         print(f"Response time: {end_time - start_time:.2f} seconds")
 
+def transfer_to_representative(user_input):
+    # Implement logic to transfer the call to a human representative
+    print(f"Transferring to human representative. User input: {user_input}")
+    # You might want to save the user input to a file or database for the representative to review
+    
 if __name__ == "__main__":
     main()
